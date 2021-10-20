@@ -1,0 +1,105 @@
+---
+title: "Lab 1 Assignment TADA Module B"
+author: "Drew Walker"
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+bibliography: references.bib
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+#remotes::install_github("slu-openGIS/postmastr")
+library(table1)
+library(operators)
+library(magrittr)
+library(stm)
+library(here)
+library(postmastr)
+library(textmineR)
+library(tidyverse)
+library(tidytext)
+library(knitr) #Create nicely formatted output tables
+library(kableExtra) #Create nicely formatted output tables
+library(formattable) #For the color_tile function
+library(lubridate)
+library(academictwitteR)
+library(tm)
+library(tidygeocoder)
+library(ggpubr)
+library(topicmodels)
+library(scales)
+library(gt)
+library(webshot)
+library(sentimentr)
+library(syuzhet)
+library(gitcreds)
+library(credentials)
+library(rtweet)
+
+
+APIToken <- read_csv("apikeys.csv")
+api_key <- as.character(APIToken[1,1])
+api_secret_key <- as.character(APIToken[1,2])
+bearer_token <- as.character(APIToken[1,3])
+```
+
+
+# Pull tweet full archive tweet data
+
+-   Add search by hashtag
+
+```{r covid-tweets}
+#
+##Get tweets with academictwitteR
+today <- as.POSIXct(Sys.Date())
+#covid_tweets <-  get_all_tweets(
+#  query = "covid19",
+#  start_tweets = "2020-10-12T00:00:00Z",
+#  end_tweets = "2021-10-19T00:00:00Z",
+#  bearer_token,data_path = "data/",
+#  n = 1000)
+#Whoops, not the same timeframe/format-- rtweet seems to merge user info as well
+
+# covid <- search_tweets("covid", n=1000)
+#write_rds(covid,"covid_tweets.rds")
+covid <- read_rds("covid_tweets.rds")
+colnames(covid)
+head(covid$text)
+```
+
+# Covid19 tweets time series by 2 sec
+```{r ts1}
+covid_ts_plot <- covid %>%  
+ts_plot(by=2)+
+  ggplot2::theme_minimal()+
+  theme(plot.title = element_text(face = "bold"))+
+  labs(x = "seconds", y = "Frequency",
+       title = "Frequency of 'covid19' tweets",
+       subtitle = "Tweets per 3 second intervals")
+covid_ts_plot
+```
+
+# Covid19 tweets time series by 3 sec
+```{r ts2}
+covid_ts_plot <- covid %>%  
+ts_plot(by=3)+
+ ggplot2::theme_minimal()+
+  theme(plot.title = element_text(face = "bold"))+
+  labs(x = "seconds", y = "Frequency",
+       title = "Frequency of 'covid19' tweets",
+       subtitle = "Tweets per 3 second intervals")
+covid_ts_plot
+```
+
+# Covid19 tweets time series by 5 sec
+```{r ts3}
+covid_ts_plot <- covid %>%  
+ts_plot(by=5)+
+ ggplot2::theme_minimal()+
+  theme(plot.title = element_text(face = "bold"))+
+  labs(x = "seconds", y = "Frequency",
+       title = "Frequency of 'covid19' tweets",
+       subtitle = "Tweets per 5 second intervals")
+covid_ts_plot
+```

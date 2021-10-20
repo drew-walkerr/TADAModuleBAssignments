@@ -1,0 +1,53 @@
+---
+title: "lab2_tada_nlp"
+author: "Drew Walker"
+date: "10/20/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(rtweet)
+library(wordcloud)
+library(magrittr)
+library(tidyverse)
+library(tidytext)
+library(readxl)
+library(readr)
+library(tm)
+library(lubridate)
+library(here)
+```
+```{r}
+tweets_data <- read_rds("covid_tweets.rds")
+tweet_texts <- tweets_data$text
+summary(tweet_texts)
+tweet_corpus <- VCorpus(VectorSource(tweet_texts))
+
+```
+
+# Preprocessing
+```{r, preprocessing}
+myStopWords <- c(stopwords(),"covid19","covid","covid-19")
+tweet_corpus_processed <- tweet_corpus %>% 
+  tm_map(content_transformer(tolower)) %>% 
+  tm_map(removeWords,myStopWords) %>% 
+  tm_map(stemDocument)
+
+doc_term_matrix <- DocumentTermMatrix(tweet_corpus_processed)
+inspect(doc_term_matrix)
+
+terms_with_high_freq <- findFreqTerms(doc_term_matrix,10)
+
+```
+
+There are 307 terms with high frequency. After running the first time, i realized one of these terms was "-19", so i added "covid-19" to the stop words.
+
+# WordCloud 
+
+```{r, wordcloud}
+wordcloud(tweet_corpus_processed, min.freq=10,max.words=200,scale=c(3,.1),random.order=FALSE,colors=brewer.pal(12,"Set3"))
+```
+
+
+

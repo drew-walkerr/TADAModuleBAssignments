@@ -8,14 +8,115 @@ output: html_document
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(academictwitteR)
+library(magrittr)
 library(tidyverse)
 library(tidytext)
 library(readxl)
 library(readr)
+library(tm)
+library(lubridate)
+library(here)
 ```
 
 ```{r read_data}
 set1_raw <- read_excel("TADA_A1_set1.xlsx")
-set2_raw <- read_csv("TADA_A1_set2.csv")
+set1_raw <- set1_raw %>% 
+  rename(date = date...2,
+         text = date...4) %>% 
+  mutate(real_id = row_number())
+set2_raw <- read_csv("TADA_A1_set2.csv") %>% 
+  rename(text = date_1) %>% 
+  mutate(real_id = row_number())
+
+set2_raw$date <- mdy(set2_raw$date)
+```
+# Tasks
+
+To provide insights to the researcher, you will perform the following tasks and/or answer the
+following questions:
+
+1. What are the date ranges for the two sets? What information are provided in the CSV files?
+a. Set 1 ranges from 2019-11-01 to 2020-01-30
+b. Set 2 ranges from 2020-02-01 to 2020-04-29
+```{r, date_ranges}
+
+first(as.Date(set1_raw$date))
+last(as.Date(set1_raw$date))
+
+first(as.Date(set2_raw$date))
+last(as.Date(set2_raw$date))
+
 ```
 
+What are the languages in which tweets have been posted? (1 point)
+```{r,detect_languages}
+set1_langs <- set1_raw %>% 
+  group_by(lang) %>% 
+  summarise(count = n()) %>% 
+  arrange(desc(count))
+print(set1_langs)
+set2_langs <- set2_raw %>% 
+  group_by(lang) %>% 
+  summarise(count = n()) %>% 
+  arrange(desc(count))
+print(set2_langs)
+```
+
+2. What is the total number of posts in set 1? What is the total in set 2? (1 point)
+```{r, total_posts}
+nrow(distinct(set1_raw,id))
+nrow(distinct(set2_raw,id))
+# Looks like the csv may have rounded a lot of the tweet ids in set2, rounding the number in excel. This could be an issue.
+
+```
+```{r, corpus}
+set1_corpus <- VCorpus(VectorSource(set1_raw))
+set2_corpus <- VCorpus(VectorSource(set2_raw))
+
+```
+
+3. How many tweets are there for methadone, Suboxone and fentanyl in total? Tip: sometimes
+alternative expressions are used for substances (eg., fent for fentanyl). (2 points)
+```{r,tweets_by_substance}
+
+```
+
+4. Are there fentanyl analogs that are also being discussed (eg., carfentanil)? (1 point)
+```{r fentanyl_analogs}
+
+```
+
+5. What are some of the topics that are most closely associated with each of the three
+substances? Top 5-10 topics (if relevant) is acceptable. (2 points)
+```{r, substance_topics}
+
+```
+
+6. Among the three substances and the tweets containing them, which two sets of tweets are
+more similar than the other? There are several ways you can approach this problem. For
+example, you could take a sample of tweets mentioning each of these substances and
+represent each set as a single document. Or you may compare tweets from one set one-by-one
+with a sample of the tweets from another set. Any reasonable approach for this task is
+acceptable. Explain your method in the report (4 points).
+```{r, substance_similarities}
+
+```
+
+7. Generate word clouds for each set, so that they can be shown to the researcher. (2 points)
+```{r, wordclouds}
+
+```
+
+8. Generate appropriate time-series figures to compare how the frequencies of mentions of
+these substances differ. (2 points)
+```{r, time_series}
+
+```
+
+9. Find the top 10 most frequent bigrams in each of the three sets. Plot a bar chart for these. (2
+points)’
+```{r, most_frequent_bigrams}
+
+```
+
+10. Write a report (described below) for your experiments and results. (3 points)
