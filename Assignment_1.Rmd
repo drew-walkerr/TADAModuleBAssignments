@@ -1,0 +1,21 @@
+---
+title: "Assignment_1"
+author: "Drew Walker"
+date: "10/20/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(academictwitteR)
+library(tidyverse)
+library(tidytext)
+library(readxl)
+library(readr)
+```
+
+```{r read_data}
+set1_raw <- read_excel("TADA_A1_set1.xlsx")
+set2_raw <- read_csv("TADA_A1_set2.csv")
+```
+
