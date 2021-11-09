@@ -241,8 +241,45 @@ tweets_per_day
 
 9. Find the top 10 most frequent bigrams in each of the three sets. Plot a bar chart for these. (2
 points)’
+
+# Fentanyl most frequent bigrams (terms with over 500 occurrences)
 ```{r, most_frequent_bigrams}
+BigramTokenizer <- function(x){
+    unlist(lapply(ngrams(words(x), 2), paste, collapse = " "), use.names = FALSE)}
+
+fent_bi_tdm <- TermDocumentMatrix(fentanyl, control = list(tokenize = BigramTokenizer))
+
+findFreqTerms(fent_bi_tdm,500)
+
+
+```
+# Methadone most frequent bigrams (at least 250 occurrences)
+```{r, most_frequent_bigrams_methadone}
+
+
+methadone_bi_tdm <- TermDocumentMatrix(methadone, control = list(tokenize = BigramTokenizer))
+
+findFreqTerms(methadone_bi_tdm,250)
+
+
+```
+
+# Suboxone most frequent bigrams (at least 250 occurrences)
+```{r, most_frequent_bigrams_methadone}
+
+
+suboxone_bi_tdm <- TermDocumentMatrix(suboxone, control = list(tokenize = BigramTokenizer))
+
+findFreqTerms(suboxone_bi_tdm,100)
+
 
 ```
 
 10. Write a report (described below) for your experiments and results. (3 points)
+
+You are required to submit a report (2 pages max plus figures/tables). Use Times New Roman, Georgia or Palatino Linotype font (11pt, single-spaced, justified) 
+
+- Describe the methods you used in the report and any intuition behind choosing specific NLP methods 
+
+- Present the results and a brief  discussion of  any insight you may have obtained. 
+- Your report will have to contain a link to your code. Ideally, the script/code should be on GitHub or Bitbucket. However, you will not be graded down for other mechanisms of  code sharing. 
