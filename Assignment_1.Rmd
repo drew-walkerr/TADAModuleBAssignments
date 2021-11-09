@@ -7,15 +7,16 @@ output: html_document
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(academictwitteR)
 library(magrittr)
-library(tidyverse)
 library(tidytext)
 library(readxl)
 library(readr)
 library(tm)
 library(lubridate)
 library(here)
+library(forcats)
+library(dplyr)
+library(ggplot2)
 ```
 
 ```{r read_data}
@@ -73,22 +74,79 @@ nrow(distinct(set2_raw,id))
 set1_corpus <- VCorpus(VectorSource(set1_raw))
 set2_corpus <- VCorpus(VectorSource(set2_raw))
 
+full_text <- rbind(set1_raw,set2_raw)
 ```
 
 3. How many tweets are there for methadone, Suboxone and fentanyl in total? Tip: sometimes
 alternative expressions are used for substances (eg., fent for fentanyl). (2 points)
 ```{r,tweets_by_substance}
+#Methadone
 
+methadone_tweets <- full_text %>% 
+  filter(lang== "en") %>% 
+  filter(grepl('methadone|methdone|methad',text,ignore.case = TRUE)) %>% 
+  filter(lang== "en") %>% 
+  mutate(v= "methadone_tweets",
+         analog = "NA")
+
+#suboxone
+suboxone_tweets <- full_text %>%
+  filter(lang== "en") %>%
+  filter(grepl('suboxone|subox|suboxne|suboxin|suboxen|saboxin|suboxine|suboxon|saboxone',text,ignore.case = TRUE)) %>% 
+  mutate(v= "suboxone_tweets",
+         analog = "NA")
+#Fentanyl 
+fentanyl_tweets <- full_text %>%
+  filter(lang== "en") %>%
+  filter(grepl('fentanyl|fent|fentanil|carfentanil|furanyl|acetyl|cyclopropyl',text,ignore.case = TRUE)) %>% 
+  mutate(v= "fentanyl_tweets",
+         analog = case_when(
+           stringi::stri_detect_regex(text, "[Cc]arfentanil") ~ "carfentanil",
+           stringi::stri_detect_regex(text, "[Ff]uranyl") ~ "furanyl",
+           stringi::stri_detect_regex(text, "[Aa]cetyl") ~ "acetyl",
+      stringi::stri_detect_regex(text, "[Cv]yclopropyl") ~ "cyclopropyl",
+      TRUE ~ "NA"))
 ```
 
 4. Are there fentanyl analogs that are also being discussed (eg., carfentanil)? (1 point)
 ```{r fentanyl_analogs}
+analog_fentanyl_tweets <- fentanyl_tweets %>% 
+  filter(grepl('carfentanil|furanyl|acetyl|cyclopropyl',text,ignore.case = TRUE)) %>% 
+  group_by(analog) %>% 
+  summarize(count=n())
 
+analog_fentanyl_tweets %>%
+  mutate(name = fct_reorder(analog, count)) %>%
+  ggplot( aes(x=fct_reorder(analog,count), y=count)) +
+    geom_bar(stat="identity", fill="#f68060", alpha=.6, width=.4) +
+    coord_flip() +
+    xlab("") +
+    theme_bw()
 ```
-
+ getA
 5. What are some of the topics that are most closely associated with each of the three
 substances? Top 5-10 topics (if relevant) is acceptable. (2 points)
+
+I had some issues with getAssoc, so I decided to do a tdm comparison of the different substance corpa. 
 ```{r, substance_topics}
+
+full_annotated <- rbind(methadone_tweets,suboxone_tweets,fentanyl_tweets)
+
+full_words <- full_annotated %>% 
+  unnest_tokens(word, text) %>% 
+  count(v,word,sort=TRUE) %>% 
+  bind_tf_idf(word,v,n) %>% 
+  arrange(desc(tf_idf))
+
+
+full_words %>%
+  group_by(v) %>%
+  slice_max(tf_idf, n = 10) %>%
+  ungroup() %>%
+  ggplot(aes(tf_idf, fct_reorder(word, tf_idf), fill = v)) +
+  geom_col(show.legend = FALSE) +
+  facet_wrap(~v, ncol = 2, scales = "free") +
+  labs(x = "tf-idf", y = NULL)
 
 ```
 
@@ -99,18 +157,86 @@ represent each set as a single document. Or you may compare tweets from one set 
 with a sample of the tweets from another set. Any reasonable approach for this task is
 acceptable. Explain your method in the report (4 points).
 ```{r, substance_similarities}
+fentanyl_text <- fentanyl_tweets$text
+myStopWords <- stopwords()
+fentanyl <- VCorpus(VectorSource(fentanyl_text)) %>% 
+  tm_map(content_transformer(tolower)) %>% 
+  tm_map(removeWords,myStopWords) %>% 
+  tm_map(stemDocument)
+fentanyl.dtm <- DocumentTermMatrix(fentanyl, control = list(weighting = weightTfIdf, stopwords = TRUE))
 
+suboxone_text <- suboxone_tweets$text
+suboxone <-  VCorpus(VectorSource(suboxone_text)) %>% 
+  tm_map(content_transformer(tolower)) %>% 
+  tm_map(removeWords,myStopWords) %>% 
+  tm_map(stemDocument)
+suboxone.dtm <- DocumentTermMatrix(suboxone, control = list(weighting = weightTfIdf, stopwords = TRUE))
+methadone_text <- methadone_tweets$text
+
+methadone <- VCorpus(VectorSource(methadone_text))%>% 
+  tm_map(content_transformer(tolower)) %>% 
+  tm_map(removeWords,myStopWords) %>% 
+  tm_map(stemDocument)
+methadone.dtm <- DocumentTermMatrix(methadone, control = list(weighting = weightTfIdf, stopwords = TRUE))
+
+#Find assocs likely not able to grab assocs because of stemming? 
+#tm::findAssocs(fentanyl,"fentanyl",.8)
+#tm::findAssocs(fentanyl.dtm,"fentanyl",corlimit = .8)
+#tm::findAssocs(methadone.dtm,"methadon",corlimit = .5)
+#findAssocs(doc_term_matrix,"fentanyl",corlimit = .1)
+
+all_texts <- c(methadone_tweets,suboxone_tweets,fentanyl_tweets)
+
+all_texts_corpus <- Corpus(VectorSource(all_texts))%>% 
+  tm_map(content_transformer(tolower)) %>% 
+  tm_map(removeWords,myStopWords) %>% 
+  tm_map(stemDocument)
+doc_term_freq <- DocumentTermMatrix(all_texts_corpus)
+#methadone vs suboxone
+cosine(doc_term_freq[[1]],doc_term_freq[[2]])
+#methadone vs fentanyl
+cosine(doc_term_freq[[1]],doc_term_freq[[3]])
+#suboxone vs fentanyl 
+cosine(doc_term_freq[[2]],doc_term_freq[[3]])
 ```
+
+Methadone and Suboxone Cosine similarity = 0.9275224
+Methadone and Fentanyl Cosine Similarity = 0.02179706
+Suboxone and Fentanyl Cosine Similarity = 0.009724012
+
 
 7. Generate word clouds for each set, so that they can be shown to the researcher. (2 points)
-```{r, wordclouds}
-
+# Fentanyl Corpus word cloud
+```{r, fent-wordclouds}
+library(wordcloud)
+wordcloud(fentanyl, min.freq=10,max.words=200,scale=c(3,.1),random.order=FALSE,colors=brewer.pal(12,"Set3"))
 ```
 
+# Methadone Corpus word cloud
+```{r, methadone-wordclouds}
+wordcloud(methadone, min.freq=10,max.words=200,scale=c(3,.1),random.order=FALSE,colors=brewer.pal(12,"Set3"))
+```
+
+```{r, suboxone-wordclouds}
+wordcloud(suboxone, min.freq=10,max.words=200,scale=c(3,.1),random.order=FALSE,colors=brewer.pal(12,"Set3"))
+```
 8. Generate appropriate time-series figures to compare how the frequencies of mentions of
 these substances differ. (2 points)
 ```{r, time_series}
-
+ts_full_annotated <- full_annotated %>% 
+  mutate(day = as.Date(date),
+         month = month(day),
+         year = year(day)) %>% 
+  group_by(day,v) %>% 
+  summarize(count = n())
+  
+library(viridis)
+tweets_per_day <- ggplot(ts_full_annotated, aes(day, count,group=v, color=v)) +
+  geom_line()+
+  scale_color_viridis(discrete = TRUE) +
+  geom_smooth(method = "loess", se = FALSE) +
+  labs(y = "Tweets per Day", title = "Types of Substance Mentioned in Tweets")
+tweets_per_day
 ```
 
 9. Find the top 10 most frequent bigrams in each of the three sets. Plot a bar chart for these. (2
