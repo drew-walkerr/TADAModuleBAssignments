@@ -1,0 +1,47 @@
+---
+title: "Assignment_2_Drew_Walker"
+author: "Drew Walker"
+date: "11/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Tasks 
+
+To provide insights to the public health official, you will perform the following tasks and/or 
+answer the following questions:
+
+1. Use the annotated data to design a supervised classification experiment. The experiment 
+should involve training and evaluation. The standard supervised classification steps must be 
+followed. (3 points) 
+
+```{r, classification-model}
+
+```
+
+
+2. Use the same set of  tweets for comparing the classification performances of  at least 3 
+classifiers. Which classifier is the best for classification? (3 points) 
+
+```{r compare-classifiers}
+
+```
+
+3. Use the best-performing machine learning model to automatically classify all the unlabeled 
+tweets. (2 points) 
+
+```{r best-model}
+
+```
+
+4. Compare the distribution of  nonmedical use reporting tweets between the two locations (eg.., 
+# of  reports, proportion of  tweets representing nonmedical use, population-adjusted report 
+rate). (3 points) 
+5. Compare the numbers of  nonmedical use representing tweets between opioids (eg., 
+oxycodone), benzodiazepines (eg., alprazolam), and stimulants (eg., amphetamine mixed salts 
+[aka. adderall]). (3 points) 
+6. Compare the differences in nonmedical use among the different gender identities. 
+7. Write a report (described below) for your experiments and results. (3 points) 

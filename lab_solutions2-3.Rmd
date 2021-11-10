@@ -1,0 +1,104 @@
+---
+title: 'MODULE B, LAB 4: SUPERVISED TEXT CLASSIFICATION'
+author: "ABEED SARKER; COURSE: BSHES 797R/GRAD 700R"
+output:
+  html_document:
+    depth: 3
+    highlight: tango
+    theme: paper
+    toc: no
+  pdf_document:
+    toc: no
+---
+
+* First, let's open some libraries that we'll be using
+```{r message=FALSE, warning=FALSE}
+library(dplyr)
+library(caTools)
+library(rfUtilities)
+library(tm)
+library(mlapi)
+library(e1071)
+```
+
+* Next, we have to load the dataset
+```{r}
+full_dataset <- read.csv('Tweets.csv')
+glimpse(full_dataset)
+```
+
+
+* Now let's load the text and preprocess it based on our knowledge from the last few classes
+```{r}
+all_texts <-full_dataset$text
+all_texts_corpus <- VCorpus(VectorSource(all_texts))
+all_texts_corpus <- tm_map(all_texts_corpus, content_transformer(tolower))
+all_texts_corpus <- tm_map(all_texts_corpus, removePunctuation)
+all_texts_corpus <- tm_map(all_texts_corpus, removeWords,stopwords("english"))
+all_texts_corpus <- tm_map(all_texts_corpus, stemDocument)
+length(all_texts_corpus)
+
+```
+* Now that we've loaded and preprocessed the texts, let's start vectorizing! *But this time, we will split the training and test sets first to avoid data leak*. 
+* First, let's generate n-grams by defining a function called NLP_tokenizer. Then we convert all the tweets into n-grams (1-3). If you study the code carefully, you'll see that for 2- and 3-grams, adjacent words are being concatenated using an *underscore* character.
+```{r}
+NLP_tokenizer <- function(x) {
+  unlist(lapply(ngrams(words(x), 1:3), paste, collapse = "_"), use.names = FALSE)
+}
+n_gram_corpus <- tm_map(all_texts_corpus,content_transformer(NLP_tokenizer))
+```
+
+* We can view the length of the corpus and the content to ensure that the n-grams were generated appropriately.
+```{r}
+length(n_gram_corpus)
+n_gram_corpus[[2]]$content
+```
+
+* Now we split the sets (before vectorizing them). We also split the classes in the same manner.
+```{r}
+set.seed(1234)
+split <- sample.split(full_dataset$airline_sentiment,SplitRatio = 0.8)
+training_ngram_corpus <- subset(n_gram_corpus, split==TRUE)
+eval_ngram_corpus <- subset(n_gram_corpus, split==FALSE)
+training_classes <- subset(full_dataset$airline_sentiment, split==TRUE)
+eval_classes <- subset(full_dataset$airline_sentiment, split==FALSE)
+```
+
+* Now that we have separated the sets, we can start vectorizing. We are doing it step by step. First, we are generating a document-term matrix for the training set. Then we are removing sparse n-grams.
+```{r}
+training_dct_matrix <- DocumentTermMatrix(training_ngram_corpus)
+training_dct_matrix_sparse <- removeSparseTerms(training_dct_matrix,0.995)
+```
+
+* Now we have to vectorize the test set. We already have vectors for each instance of the training set. Each element in the vector is a uni-, bi- or tri-gram. You can think of it as columns. Each column represent a text element which is a uni-, bi- or tri-gram. For machine learning, we have to represent the test set based on the same n-grams. If we add additional n-grams, we'll get an error because those n-grams were not seen by the learning algorithm during the training phase. *It's very important to understand this*
+
+* So here, we are generating a document-term matrix for the test set, but we are passing the column names (which are essentially n-grams) from the training set, so that the test set only includes n-gram frequencies from those.
+```{r}
+eval_dct_matrix_sparse <- DocumentTermMatrix(eval_ngram_corpus, list(dictionary=colnames(training_dct_matrix_sparse)))
+```
+* The next steps are straightforward. We convert to data frames and make sure the instances follow the R-specific formats.
+```{r}
+training_term_matrix_df <- as.data.frame(as.matrix(training_dct_matrix_sparse))
+eval_term_matrix_df <- as.data.frame(as.matrix(eval_dct_matrix_sparse))
+colnames(training_term_matrix_df) <- make.names(colnames(training_term_matrix_df))
+colnames(eval_term_matrix_df) <- make.names(colnames(eval_term_matrix_df))
+training_term_matrix_df$airline_sentiment <- training_classes
+training_term_matrix_df$airline_sentiment <-as.factor(training_term_matrix_df$airline_sentiment)
+```
+
+* Now that we have a training and a test set, we can do some machine learning!
+```{r}
+trained_model <- svm(airline_sentiment ~., data=training_term_matrix_df)
+```
+
+* Now we are ready to make the predictions!
+```{r}
+predictions <- predict(trained_model, newdata=eval_term_matrix_df)
+```
+
+* How is our system performing?
+```{r}
+accuracy(eval_classes,predictions)
+```
+
+That was great! Now, instead of using the default document-term matrix, can you use a Tf-Idf matrix?
