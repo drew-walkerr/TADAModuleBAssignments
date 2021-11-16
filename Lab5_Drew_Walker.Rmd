@@ -1,8 +1,9 @@
 ---
 title: "Lab 5"
 author: "Drew Walker"
-date: "11/3/2021"
+date: "11/15/2021"
 output: html_document
+bibliography: references.bib
 ---
 
 ```{r setup, include=FALSE}
@@ -17,6 +18,10 @@ library(randomForest)
 library(mltest)
 ```
 
+# Question 1
+
+Evaluate performance of SVM: Accuracy: Class-specific F1 scores:
+
 ```{r dataload}
 full_dataset <- read_csv("Tweets.csv")
 
@@ -24,7 +29,9 @@ tweet_texts <- full_dataset$text
 
 tweet_corpus <- VCorpus(VectorSource(tweet_texts))
 ```
+
 # preprocessing
+
 ```{r preprocess}
 myStopWords <- c(stopwords())
 corpus <- tweet_corpus %>% 
@@ -49,8 +56,8 @@ length(n_gram_corpus)
 n_gram_corpus[[2]]$content
 ```
 
-
 ## Creating ttraining and test data for ML
+
 ```{r creating-training-and-test}
 
 set.seed(1234)
@@ -64,12 +71,14 @@ eval_classes <- subset(full_dataset$airline_sentiment,split==FALSE)
 ```
 
 # Vectorize
+
 ```{r create-dtm}
 training_dtm <- DocumentTermMatrix(training_ngram_corpus)
 training_dtm_sparse <- removeSparseTerms(training_dtm,0.995)
 ```
 
 # restricting columns for test set
+
 ```{r, restricting}
 eval_dtm_sparse <- DocumentTermMatrix(eval_n_gram_corpus,list(dictionary=colnames(training_dtm_sparse)))
 ```
@@ -84,26 +93,54 @@ training_dtm_df$airline_sentiment <- training_classes
 training_dtm_df$airline_sentiment <- as.factor(training_dtm_df$airline_sentiment)
 ```
 
-
 ```{r random-forest}
 trained_model <- randomForest::randomForest(airline_sentiment ~.,data=training_dtm_df)
 ```
-
 
 ```{r predictions}
 predictions <- predict(trained_model, newdata=eval_dtm_df)
 ```
 
-
 # Accuracy
+
 ```{r, warning=FALSE}
 mltest::ml_test(predictions,eval_classes)
 ```
 
-http://www.sthda.com/english/wiki/correlation-test-between-two-variables-in-r
+# Accuracy of SVM compared with random forest:
 
-```{r correlations}
+## SVM:
+
+Accuracy: 0.7627177
+
+F1:
+
+negative neutral positive 0.8506741 0.5303867 0.6516052
+
+## Random Forest:
+
+Accuracy: 0.7487197 F1:\
+negative neutral positive 0.8459000 0.4481409 0.6644370
+
+It appears that the SVM model was more accurate, and had a higher F1 score than the random forest model for predicting each category of airline review.
+
+```{r correlations-data}
 tweets_and_death_rates <- read_csv("tweet_and_death_rates.csv")
 ```
 
+# Correlations between tweet rates and county-level overdose deaths
 
+```{r correlations2}
+
+hist(tweets_and_death_rates$death_rate)
+hist(tweets_and_death_rates$tweet_rate)
+cor.test(tweets_and_death_rates$death_rate,tweets_and_death_rates$tweet_rate,
+         method = "pearson")
+cor.test(tweets_and_death_rates$death_rate,tweets_and_death_rates$tweet_rate,
+         method = "spearman")
+
+```
+
+Because the Tweet Rates, in particular were not normally distributed, we would recommend interpretation of the Spearman correlation coefficient between county-level tweet rates and opioid-related overdose death rates, though calculated both Spearman and Pearson correlations (Pearson r=.451 , P \< .001, Spearman r = 0.331, p = .004). These values are identical to those reported in Sarker et. al's 2019 smash hit research study assessing predictions of non-medical opioid use in twitter posts with opioid-related overdose deaths [@sarker2019].
+
+:)

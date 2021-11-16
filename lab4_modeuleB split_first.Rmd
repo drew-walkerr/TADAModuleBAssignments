@@ -13,6 +13,7 @@ library(caTools)
 library(rfUtilities)
 library(e1071)
 library(caTools)
+library(mltest)
 
 ```
 
@@ -101,3 +102,7 @@ predictions <- predict(trained_model, newdata=eval_dtm_df)
 accuracy(eval_classes,predictions)
 ```
 
+# Accuracy2 
+```{r accuracy2, warning=FALSE}
+mltest::ml_test(predictions,eval_classes)
+```
