@@ -1,47 +1,148 @@
 ---
 title: "Assignment_2_Drew_Walker"
 author: "Drew Walker"
-date: "11/10/2021"
+date: "11/30/2021"
 output: html_document
+date: "`r format(Sys.time(), '%d %B, %Y')`"
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-```
-
-# Tasks 
-
-To provide insights to the public health official, you will perform the following tasks and/or 
-answer the following questions:
-
-1. Use the annotated data to design a supervised classification experiment. The experiment 
-should involve training and evaluation. The standard supervised classification steps must be 
-followed. (3 points) 
-
-```{r, classification-model}
-
-```
-
-
-2. Use the same set of  tweets for comparing the classification performances of  at least 3 
-classifiers. Which classifier is the best for classification? (3 points) 
-
-```{r compare-classifiers}
+library(tidyverse)
+library(tm)
+library(caTools)
+library(rfUtilities)
+library(e1071)
+library(caTools)
+library(mltest)
+library(stringr)
+library(randomForest)
+library(caret)
+library(caretEnsemble)
 
 ```
 
-3. Use the best-performing machine learning model to automatically classify all the unlabeled 
-tweets. (2 points) 
+```{r dataload}
+annotated_dataset <- read_csv("TADA_Annotated_data.csv")
+unlabeled_dataset <- read_csv("TADA_unlabeled_data.csv")
 
-```{r best-model}
+annotated_text <- annotated_dataset$text
+annotated_text <- str_replace_all(annotated_dataset$text,"[^[:graph:]]", " ") 
+
+
+tweet_corpus <- VCorpus(VectorSource(annotated_text))
 
 ```
 
-4. Compare the distribution of  nonmedical use reporting tweets between the two locations (eg.., 
-# of  reports, proportion of  tweets representing nonmedical use, population-adjusted report 
-rate). (3 points) 
-5. Compare the numbers of  nonmedical use representing tweets between opioids (eg., 
-oxycodone), benzodiazepines (eg., alprazolam), and stimulants (eg., amphetamine mixed salts 
-[aka. adderall]). (3 points) 
-6. Compare the differences in nonmedical use among the different gender identities. 
-7. Write a report (described below) for your experiments and results. (3 points) 
+Due to errors in preprocessing, we had to remove emoji characters from the dataset. THis is a potential limitation of the study given the potential for emojis to be used to signify illicit use of substances. (Citation?)
+
+# preprocessing
+```{r preprocess}
+myStopWords <- c(stopwords())
+corpus <- tweet_corpus %>% 
+  tm_map(content_transformer(tolower)) %>%
+  tm_map(removePunctuation) %>% 
+  tm_map(removeWords,myStopWords) %>% 
+  tm_map(stemDocument)
+length(corpus)
+```
+
+```{r ngrams-tokenizer}
+NLP_tokenizer <- function(x){
+  unlist(lapply(ngrams(words(x),1:3),paste,collapse = "_"),use.names=FALSE)
+}
+n_gram_corpus <- tm_map(corpus,content_transformer(NLP_tokenizer))
+```
+
+```{r, viewlength}
+length(n_gram_corpus)
+n_gram_corpus[[2]]$content
+```
+
+
+## Creating ttraining and test data for ML
+```{r creating-training-and-test}
+
+set.seed(1234)
+split = sample.split(annotated_dataset$class, SplitRatio = 0.8)
+training_ngram_corpus = subset(n_gram_corpus, split==TRUE)
+
+eval_n_gram_corpus = subset(n_gram_corpus,split==FALSE)
+
+training_classes <- subset(annotated_dataset$class,split==TRUE)
+eval_classes <- subset(annotated_dataset$class,split==FALSE)
+```
+
+# Vectorize
+```{r create-dtm}
+training_dtm <- DocumentTermMatrix(training_ngram_corpus)
+training_dtm_sparse <- removeSparseTerms(training_dtm,0.995)
+```
+
+# restricting columns for test set
+```{r, restricting}
+eval_dtm_sparse <- DocumentTermMatrix(eval_n_gram_corpus,list(dictionary=colnames(training_dtm_sparse)))
+```
+
+```{r dataframes}
+training_dtm_df <- as.data.frame(as.matrix(training_dtm_sparse))
+eval_dtm_df <- as.data.frame(as.matrix(eval_dtm_sparse))
+colnames(training_dtm_df) <- make.names(colnames(training_dtm_df))
+colnames(eval_dtm_df) <- make.names(colnames(eval_dtm_df))
+
+training_dtm_df$class <- training_classes
+training_dtm_df$class <- as.factor(training_dtm_df$class)
+```
+
+#SVM Model
+```{r svm}
+trained_model <- svm(class ~.,data=training_dtm_df)
+```
+
+
+```{r svm-predictions}
+svm_predictions <- predict(trained_model, newdata=eval_dtm_df)
+```
+
+# SVM Accuracy
+```{r accuracy-svm, warning=FALSE}
+mltest::ml_test(svm_predictions,eval_classes)
+svm_accuracy <- mltest::ml_test(svm_predictions,eval_classes)
+
+```
+
+#Random Forest Model
+```{r random_forest}
+rf_trained_model <- randomForest::randomForest(class ~.,data=training_dtm_df)
+```
+
+Random forest predictions
+```{r random-forest-predictions}
+random_forest_predictions <- predict(rf_trained_model, newdata=eval_dtm_df)
+```
+
+# RF Accuracy
+```{r accuracy-svm, warning=FALSE}
+mltest::ml_test(random_forest_predictions,eval_classes)
+rf_accuracy <- mltest::ml_test(random_forest_predictions,eval_classes)
+
+save.image("SVM_and_rf_models.Rdata")
+```
+# Ensemble Classification
+
+https://github.com/kmutya/Ensemble-Learning-in-R
+
+```{r ensemble}
+
+# 0 - nonmedical use
+# 1 - consumption (prescribed) 
+# 2 - information/mention
+# 3 unrelated 
+levels(training_dtm_df$class) = c("nonmedical","consumption","information_mention","unrelated")
+control = trainControl(method="repeatedcv", number=10, repeats=5, savePredictions=TRUE, classProbs=TRUE)
+rf <- train(class ~ ., data = training_dtm_df, method = 'rf', metric = 'Accuracy', trControl = control)
+rf
+
+
+```
+
