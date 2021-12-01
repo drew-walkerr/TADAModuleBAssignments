@@ -17,17 +17,19 @@ library(caTools)
 library(mltest)
 library(stringr)
 library(randomForest)
+library(caTools)
 library(caret)
 library(caretEnsemble)
 
 ```
 
 ```{r dataload}
-annotated_dataset <- read_csv("TADA_Annotated_data.csv")
-unlabeled_dataset <- read_csv("TADA_unlabeled_data.csv")
+annotated_dataset <- read.csv("TADA_Annotated_data.csv")
+unlabeled_dataset <- read.csv("TADA_unlabeled_data.csv")
 
+annotated_dataset <- annotated_dataset %>% 
+  rename(CLASS = class)
 annotated_text <- annotated_dataset$text
-annotated_text <- str_replace_all(annotated_dataset$text,"[^[:graph:]]", " ") 
 
 
 tweet_corpus <- VCorpus(VectorSource(annotated_text))
@@ -64,13 +66,13 @@ n_gram_corpus[[2]]$content
 ```{r creating-training-and-test}
 
 set.seed(1234)
-split = sample.split(annotated_dataset$class, SplitRatio = 0.8)
+split = sample.split(annotated_dataset$CLASS, SplitRatio = 0.8)
 training_ngram_corpus = subset(n_gram_corpus, split==TRUE)
 
 eval_n_gram_corpus = subset(n_gram_corpus,split==FALSE)
 
-training_classes <- subset(annotated_dataset$class,split==TRUE)
-eval_classes <- subset(annotated_dataset$class,split==FALSE)
+training_classes <- subset(annotated_dataset$CLASS,split==TRUE)
+eval_classes <- subset(annotated_dataset$CLASS,split==FALSE)
 ```
 
 # Vectorize
@@ -90,13 +92,14 @@ eval_dtm_df <- as.data.frame(as.matrix(eval_dtm_sparse))
 colnames(training_dtm_df) <- make.names(colnames(training_dtm_df))
 colnames(eval_dtm_df) <- make.names(colnames(eval_dtm_df))
 
-training_dtm_df$class <- training_classes
-training_dtm_df$class <- as.factor(training_dtm_df$class)
+
+training_dtm_df$CLASS <- training_classes
+training_dtm_df$CLASS <- as.factor(training_dtm_df$CLASS)
 ```
 
 #SVM Model
 ```{r svm}
-trained_model <- svm(class ~.,data=training_dtm_df)
+trained_model <- svm(CLASS ~.,data=training_dtm_df)
 ```
 
 
@@ -113,7 +116,7 @@ svm_accuracy <- mltest::ml_test(svm_predictions,eval_classes)
 
 #Random Forest Model
 ```{r random_forest}
-rf_trained_model <- randomForest::randomForest(class ~.,data=training_dtm_df)
+rf_trained_model <- randomForest::randomForest(CLASS ~.,data=training_dtm_df)
 ```
 
 Random forest predictions
@@ -128,21 +131,45 @@ rf_accuracy <- mltest::ml_test(random_forest_predictions,eval_classes)
 
 save.image("SVM_and_rf_models.Rdata")
 ```
+# Naive Bayes Classification
+
+```{r knn}
+load("SVM_and_rf_models.Rdata")
+
+knn_pred <- knn(train = training_dtm_df, cl=training_classes, test = eval_dtm_df,k=80)
+
+
+confusionMatrix(cm)
+
+```
+
+
+
 # Ensemble Classification
+
+With ensemble voting for more categories than binary, may need to add more rules that determine a winner given a tie or instance where each algorithm determines new label
 
 https://github.com/kmutya/Ensemble-Learning-in-R
 
 ```{r ensemble}
-
-# 0 - nonmedical use
-# 1 - consumption (prescribed) 
-# 2 - information/mention
-# 3 unrelated 
-levels(training_dtm_df$class) = c("nonmedical","consumption","information_mention","unrelated")
-control = trainControl(method="repeatedcv", number=10, repeats=5, savePredictions=TRUE, classProbs=TRUE)
-rf <- train(class ~ ., data = training_dtm_df, method = 'rf', metric = 'Accuracy', trControl = control)
-rf
-
-
+#load("SVM_and_rf_models.Rdata")
+## 0 - nonmedical use
+## 1 - consumption (prescribed) 
+## 2 - information/mention
+## 3 unrelated 
+#levels(training_dtm_df$class) = #c("nonmedical","consumption","information_mention","unrelated")
+#
+#
+## Example of Stacking algorithms
+## create submodels
+#control <- trainControl(method="repeatedcv", number=10, repeats=3, #savePredictions=TRUE, classProbs=TRUE)
+#algorithmList <- c('rf', 'rpart', 'glm', 'knn', 'svmRadial')
+#set.seed(1234)
+#models <- caretList(class~., data=training_dtm_df, trControl=control, #methodList=algorithmList)
+#results <- resamples(models)
+#summary(results)
+#dotplot(results)
+#
+#
 ```
 
