@@ -110,7 +110,7 @@ svm_predictions <- predict(trained_model, newdata=eval_dtm_df)
 # SVM Accuracy
 ```{r accuracy-svm, warning=FALSE}
 mltest::ml_test(svm_predictions,eval_classes)
-svm_accuracy <- mltest::ml_test(svm_predictions,eval_classes)
+svm_accuracy <- mltest::ml_test(svm_predictions,eval_classes,output.as.table = TRUE)
 
 ```
 
@@ -127,21 +127,33 @@ random_forest_predictions <- predict(rf_trained_model, newdata=eval_dtm_df)
 # RF Accuracy
 ```{r accuracy-svm, warning=FALSE}
 mltest::ml_test(random_forest_predictions,eval_classes)
-rf_accuracy <- mltest::ml_test(random_forest_predictions,eval_classes)
+rf_accuracy <- mltest::ml_test(random_forest_predictions,eval_classes,output.as.table = TRUE)
 
 save.image("SVM_and_rf_models.Rdata")
 ```
-# Naive Bayes Classification
+3rd classifier: logistic regression with LASSO
 
-```{r knn}
-load("SVM_and_rf_models.Rdata")
-
-knn_pred <- knn(train = training_dtm_df, cl=training_classes, test = eval_dtm_df,k=80)
+* https://www.kirenz.com/post/2019-09-16-r-text-mining/#logistic-regression-model
 
 
-confusionMatrix(cm)
-
+```{r multinomial-log-regression}
+library(nnet)
+multi_model <- nnet::multinom(CLASS ~., data = training_dtm_df,MaxNWts=100000)
+predicted_multi <- multi_model %>% 
+  predict(eval_dtm_df)
+multi_model_accuracy <- mltest::ml_test(predicted_multi,eval_classes, output.as.table = TRUE)
+multi_model_accuracy
 ```
+
+
+# Append Predictions
+```{r}
+length(svm_predictions)
+mltest::ml_test()
+
+unlabeled_dataset$CLASS <- best_predictions
+```
+
 
 
 
@@ -152,24 +164,102 @@ With ensemble voting for more categories than binary, may need to add more rules
 https://github.com/kmutya/Ensemble-Learning-in-R
 
 ```{r ensemble}
-#load("SVM_and_rf_models.Rdata")
-## 0 - nonmedical use
-## 1 - consumption (prescribed) 
-## 2 - information/mention
-## 3 unrelated 
-#levels(training_dtm_df$class) = #c("nonmedical","consumption","information_mention","unrelated")
-#
-#
-## Example of Stacking algorithms
-## create submodels
-#control <- trainControl(method="repeatedcv", number=10, repeats=3, #savePredictions=TRUE, classProbs=TRUE)
-#algorithmList <- c('rf', 'rpart', 'glm', 'knn', 'svmRadial')
-#set.seed(1234)
-#models <- caretList(class~., data=training_dtm_df, trControl=control, #methodList=algorithmList)
-#results <- resamples(models)
-#summary(results)
-#dotplot(results)
-#
-#
+
+getmode <- function(v) {
+ uniqv <- unique(v)
+ uniqv[which.max(tabulate(match(v, uniqv)))]
+}
+mode_test <- c(1,2,3)
+getmode(mode_test)
+# Majority vote
+# mode(predict) if none, 
+
+```
+```{r comparisons}
+library(gt)
+
+svm_accuracy <- svm_accuracy %>% 
+  mutate(model = "svm") 
+rf_accuracy <- rf_accuracy %>% 
+  mutate(model = "Random Forest")
+rf_accuracy$CLASS <- 0:3
+
+multi_model_accuracy <- multi_model_accuracy %>% 
+  mutate(model = "Multiclass Logistic Regression")
+multi_model_accuracy$CLASS <- 0:3
+
+combined_model_accuracies <- rbind(svm_accuracy,rf_accuracy,multi_model_accuracy) 
+
+combined_model_accuracies_table <- combined_model_accuracies %>% 
+select(model,CLASS,balanced.accuracy,F1,precision,recall) %>% 
+  group_by(model) %>% 
+  mutate(Label = case_when(CLASS == 0 ~ "Nonmedical Use",
+                           CLASS == 1 ~ "Prescribed Use",
+                           CLASS == 2 ~ "Information/Mention",
+                           CLASS == 3 ~ "Unrelated")) %>% 
+           select(model,Label,`Balanced Accuracy`=balanced.accuracy, F1, Precision = precision, Recall = recall)
+
+
+model_results_gt <- gt(combined_model_accuracies_table)
+model_results_gt <- model_results_gt %>% 
+  tab_header(
+    title = "Model Accuracies",
+    subtitle = "Results by Model"
+    ) %>% 
+  opt_row_striping() %>% 
+  tab_options(row_group.background.color = "#35b0ab") %>% 
+  opt_table_lines()
+model_results_gt
+
+model_results_gt %>% 
+  gtsave("Model_results.html", inline_css = TRUE)
+
+```
+
+We opted to use the Multiclass Logistic Regression because of its highest recall and F1 scores predicting Nonmedical use, which is were prioritized due to the importance of detecting every nonmedical opioid use for pharmacosurveillance weighted higher than the risk of over-estimating opioid use. We rationalize this given previous literature's criticisms that social media analyses may underestimate real-world drug use due to the selection bias among Twitter subscribers generalizing to the overall population. 
+
+```{r, expanding-predictions}
+unlabeled_dataset_clean <- unlabeled_dataset %>% 
+  select(text,city) %>% 
+  mutate(id = row_number())
+unlabeled_text <- unlabeled_dataset_clean$text
+city_corpus <- VCorpus(VectorSource(unlabeled_text))
+myStopWords <- c(stopwords())
+city_corpus_processed <- city_corpus %>% 
+  tm_map(content_transformer(tolower)) %>%
+  tm_map(removePunctuation) %>% 
+  tm_map(removeWords,myStopWords) %>% 
+  tm_map(stemDocument)
+length(city_corpus)
+
+NLP_tokenizer <- function(x){
+  unlist(lapply(ngrams(words(x),1:3),paste,collapse = "_"),use.names=FALSE)
+}
+city_n_gram_corpus <- tm_map(city_corpus_processed,content_transformer(NLP_tokenizer))
+
+length(city_n_gram_corpus)
+city_n_gram_corpus[[2]]$content
+
+
+city_dtm_sparse <- DocumentTermMatrix(city_n_gram_corpus,list(dictionary=colnames(training_dtm_sparse)))
+
+
+city_dtm_df <- as.data.frame(as.matrix(city_dtm_sparse))
+colnames(city_dtm_df) <- make.names(colnames(city_dtm_df))
+
+
+predicted_city_data <- multi_model %>% 
+  predict(city_dtm_df)
+
+unlabeled_dataset_clean$label <- predicted_city_data
+
+summaries_city <- unlabeled_dataset_clean %>% 
+  group_by(city) %>% 
+  summarise(nonmedical_use_reports = sum(label == 0)) %>% 
+  mutate(population = case_when(city == "A" ~ 500000,
+                                city == "B" ~ 10000),
+         pop_adjusted_reports = nonmedical_use_reports/population,
+         per_100_000 = pop_adjusted_reports*100000)
+
 ```
 
